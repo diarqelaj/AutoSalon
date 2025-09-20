@@ -5,8 +5,8 @@ import Testimonials from "@/components/Testimonials";
 import Contact from "@/components/Contact";
 
 export const metadata = {
-  title: 'LuxeRide - Luxury Car Rentals',
-  description: 'Chauffeured & self-drive luxury cars in major cities, delivered to your door.'
+  title: 'AutoSalon RIO - Luxury Car Heaven',
+  description: 'From classics to hypercars we have cars for tailored for every customer needs.'
 }
 
 export default function Page() {

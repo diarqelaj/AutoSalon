@@ -3,7 +3,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Users, Luggage, Fuel, Zap, Star } from "lucide-react";
 
-const fleetImage = '/assets/luxury-fleet.jpg';
+const fleetImage = '/luxury-fleet.jpg';
 
 const Fleet = () => {
   const vehicles = [

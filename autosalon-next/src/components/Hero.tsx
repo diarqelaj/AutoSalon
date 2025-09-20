@@ -2,21 +2,20 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Calendar, MapPin, Car, Shield, Clock, Award } from "lucide-react";
+import Image from "next/image";
 
-const heroImage = '/assets/hero-luxury-car.jpg';
+
 
 const Hero = () => {
   return (
     <section className="min-h-screen relative flex items-center justify-center overflow-hidden">
-      {/* Background Image */}
-      <div 
-        className="absolute inset-0 bg-cover bg-center bg-no-repeat"
-        style={{ 
-          backgroundImage: `url(${heroImage})`,
-        }}
-      >
-        <div className="absolute inset-0 bg-gradient-to-r from-background/95 via-background/80 to-background/60" />
-      </div>
+  <Image
+  src="/hero-luxury-car.jpg"
+  alt=""
+  fill
+  priority
+  className="object-cover -z-10 opacity-25" // sits behind content
+/>
       
       {/* Content */}
       <div className="relative z-10 container mx-auto px-4 py-20">
