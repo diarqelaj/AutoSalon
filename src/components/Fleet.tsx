@@ -2,7 +2,8 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Users, Luggage, Fuel, Zap, Star } from "lucide-react";
-import fleetImage from "@/assets/luxury-fleet.jpg";
+
+const fleetImage = '/luxury-fleet.jpg';
 
 const Fleet = () => {
   const vehicles = [
@@ -10,7 +11,7 @@ const Fleet = () => {
       id: 1,
       name: "Mercedes S-Class",
       category: "Executive Luxury",
-      price: "From €299/day",
+      price: "From 029/day",
       image: fleetImage,
       specs: {
         seats: 4,
@@ -26,7 +27,7 @@ const Fleet = () => {
       id: 2,
       name: "BMW 7 Series",
       category: "Executive Luxury", 
-      price: "From €279/day",
+      price: "From 079/day",
       image: fleetImage,
       specs: {
         seats: 4,
@@ -42,7 +43,7 @@ const Fleet = () => {
       id: 3,
       name: "Porsche Panamera",
       category: "Sport Luxury",
-      price: "From €399/day",
+      price: "From 099/day",
       image: fleetImage,
       specs: {
         seats: 4,
@@ -58,7 +59,7 @@ const Fleet = () => {
       id: 4,
       name: "Rolls Royce Ghost",
       category: "Ultra Luxury",
-      price: "From €799/day",
+      price: "From 799/day",
       image: fleetImage,
       specs: {
         seats: 4,
@@ -74,7 +75,7 @@ const Fleet = () => {
       id: 5,
       name: "Range Rover Autobiography",
       category: "Luxury SUV",
-      price: "From €349/day",
+      price: "From 349/day",
       image: fleetImage,
       specs: {
         seats: 5,
@@ -90,7 +91,7 @@ const Fleet = () => {
       id: 6,
       name: "Bentley Continental GT",
       category: "Grand Tourer",
-      price: "From €599/day",
+      price: "From 599/day",
       image: fleetImage,
       specs: {
         seats: 4,
