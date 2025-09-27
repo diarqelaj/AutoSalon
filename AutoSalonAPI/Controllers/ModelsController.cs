@@ -22,6 +22,20 @@ namespace AutoSalonAPI.Controllers
             var x = await _db.Models.FindAsync(id);
             return x is null ? NotFound() : x;
         }
+        [HttpGet("bodytypes")]
+        public async Task<ActionResult<IEnumerable<string>>> GetBodyTypes()
+        {
+            var types = await _db.Models
+                .AsNoTracking()
+                .Select(m => m.BodyType!)
+                .Where(bt => bt != null && bt.Trim() != "")
+                .Distinct()
+                .OrderBy(bt => bt)
+                .ToListAsync();
+
+            return types;
+        }
+
 
         [HttpPost]
         public async Task<ActionResult<Model>> Create(Model item)

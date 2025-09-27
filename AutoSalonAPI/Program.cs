@@ -1,51 +1,49 @@
-using Microsoft.Data.SqlClient;          // <-- make sure this line ends with a semicolon
+using Microsoft.Data.SqlClient;
 using Microsoft.EntityFrameworkCore;
 using AutoSalonAPI.Data;
 using DotNetEnv;
 
 static void LoadEnvFromFile(string path)
 {
-    // If you prefer DotNetEnv only, you can just call Env.Load(path) and delete this helper.
-    if (File.Exists(path))
-    {
-        Env.Load(path); // loads key=value into process env
-    }
+    if (File.Exists(path)) Env.Load(path);
 }
 
 var builder = WebApplication.CreateBuilder(args);
 
-// 1) Load .env from the content root (project folder)
+// load .env
 var envPath = Path.Combine(builder.Environment.ContentRootPath, ".env");
 LoadEnvFromFile(envPath);
 
-// 2) Read env vars
+// sql env
 string host  = Environment.GetEnvironmentVariable("SQL_HOST")        ?? "";
 string db    = Environment.GetEnvironmentVariable("SQL_DB")          ?? "";
 string user  = Environment.GetEnvironmentVariable("SQL_USER")        ?? "";
 string pass  = Environment.GetEnvironmentVariable("SQL_PASSWORD")    ?? "";
-bool encrypt = (Environment.GetEnvironmentVariable("SQL_ENCRYPT")    ?? "true")
-                  .Equals("true", StringComparison.OrdinalIgnoreCase);
-bool trust   = (Environment.GetEnvironmentVariable("SQL_TRUST_CERT") ?? "true")
-                  .Equals("true", StringComparison.OrdinalIgnoreCase);
+bool encrypt = (Environment.GetEnvironmentVariable("SQL_ENCRYPT")    ?? "true").Equals("true", StringComparison.OrdinalIgnoreCase);
+bool trust   = (Environment.GetEnvironmentVariable("SQL_TRUST_CERT") ?? "true").Equals("true", StringComparison.OrdinalIgnoreCase);
 
-// 3) Build the connection string
-var csb = new SqlConnectionStringBuilder
-{
-    DataSource = host,
-    InitialCatalog = db,
-    UserID = user,
-    Password = pass,
-    IntegratedSecurity = false,
-    MultipleActiveResultSets = true,
-    Encrypt = encrypt,
-    TrustServerCertificate = trust
+// build cs
+var csb = new SqlConnectionStringBuilder {
+    DataSource = host, InitialCatalog = db, UserID = user, Password = pass,
+    IntegratedSecurity = false, MultipleActiveResultSets = true,
+    Encrypt = encrypt, TrustServerCertificate = trust
 };
 string connectionString = csb.ToString();
-
-// Also expose it under the standard key if anything uses IConfiguration
 builder.Configuration["ConnectionStrings:CRUDCS"] = connectionString;
 
-// 4) Services
+// --- CORS: allow your frontend origin ---
+var frontendOrigin = Environment.GetEnvironmentVariable("FRONTEND_ORIGIN") ?? "http://localhost:3000";
+const string CorsPolicyName = "_frontend";
+
+builder.Services.AddCors(opt =>
+{
+    opt.AddPolicy(CorsPolicyName, p =>
+        p.WithOrigins(frontendOrigin)     // must match exactly (scheme + host + port)
+         .AllowAnyHeader()
+         .AllowAnyMethod()
+         .AllowCredentials());            // if you use cookies/Authorization header
+});
+
 builder.Services.AddControllers();
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen();
@@ -53,13 +51,17 @@ builder.Services.AddDbContext<AppDbContext>(opt => opt.UseSqlServer(connectionSt
 
 var app = builder.Build();
 
-// 5) Pipeline
 if (app.Environment.IsDevelopment())
 {
     app.UseSwagger();
     app.UseSwaggerUI();
 }
 
+// order matters: CORS should be before auth/endpoint execution
+app.UseCors(CorsPolicyName);
+
 app.UseHttpsRedirection();
+
 app.MapControllers();
+
 app.Run();
