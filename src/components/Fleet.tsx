@@ -260,7 +260,7 @@ const Fleet = () => {
               variant="outline"
               size="lg"
               className="border-luxury-gold text-luxury-gold hover:bg-luxury-gold hover:text-luxury-dark"
-              onClick={() => router.push("/fleet")}
+              onClick={() => router.push("/pricing")}
             >
               View Complete Fleet
             </Button>

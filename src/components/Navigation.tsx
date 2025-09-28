@@ -61,13 +61,22 @@ const Navigation = () => {
   );
 
   const LoggedInActions = (
-  <div className="flex items-center gap-3">
-    <span
-      className="max-w-[200px] truncate text-sm text-foreground/80 hidden md:inline"
-      title={displayName ?? ""}
-    >
-      {displayName} {roleBadge}
-    </span>
+  <div className="flex items-center gap-4">
+    {/* User chip + name */}
+    <div className="flex items-center  max-w-[240px]">
+      <span
+        className="inline-flex h-7 w-7 items-center justify-center rounded-full bg-brand-white/10 text-brand-white"
+        aria-hidden="true"
+      >
+        <User className="w-5 h-5" />
+      </span>
+      <span
+        className="truncate text-sm text-foreground/80 hidden md:inline"
+        title={displayName ?? ""}
+      >
+        {displayName} {roleBadge}
+      </span>
+    </div>
 
     {userRole === "Admin" && (
       <Button asChild variant="ghost" size="sm" className="text-foreground hover:text-brand-white">
@@ -86,6 +95,7 @@ const Navigation = () => {
     </Button>
   </div>
 );
+
 
   return (
     <nav className="fixed top-0 left-0 right-0 z-50 bg-background/95 backdrop-blur-sm border-b border-border">
