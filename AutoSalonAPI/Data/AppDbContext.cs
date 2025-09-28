@@ -1,4 +1,3 @@
-// /Data/AppDbContext.cs
 using AutoSalonAPI.Models;
 using Microsoft.EntityFrameworkCore;
 
@@ -19,6 +18,9 @@ namespace AutoSalonAPI.Data
         public DbSet<Invoice> Invoices => Set<Invoice>();
         public DbSet<Payment> Payments => Set<Payment>();
         public DbSet<Feedback> Feedbacks => Set<Feedback>();
+
+        // NEW: users for auth
+        public DbSet<User> Users => Set<User>();
 
         protected override void OnModelCreating(ModelBuilder b)
         {
@@ -42,6 +44,8 @@ namespace AutoSalonAPI.Data
                 .WithMany(c => c.Reviews)
                 .HasForeignKey(r => r.CustomerID)
                 .OnDelete(DeleteBehavior.Restrict);
+            b.Entity<Brand>().HasIndex(x => x.ImaginMake);
+            b.Entity<Model>().HasIndex(x => x.ImaginModelFamily);    
 
             b.Entity<Review>()
                 .HasOne(r => r.Vehicle)
@@ -49,7 +53,7 @@ namespace AutoSalonAPI.Data
                 .HasForeignKey(r => r.VehicleID)
                 .OnDelete(DeleteBehavior.Restrict);
 
-            // TestDrive FKs
+          
             b.Entity<TestDrive>()
                 .HasOne(t => t.Customer)
                 .WithMany(c => c.TestDrives)
@@ -68,7 +72,7 @@ namespace AutoSalonAPI.Data
                 .HasForeignKey(t => t.EmployeeID)
                 .OnDelete(DeleteBehavior.Restrict);
 
-            // SalesOrder FKs
+            
             b.Entity<SalesOrder>()
                 .HasOne(so => so.Customer)
                 .WithMany(c => c.SalesOrders)
@@ -87,14 +91,14 @@ namespace AutoSalonAPI.Data
                 .HasForeignKey(so => so.EmployeeID)
                 .OnDelete(DeleteBehavior.Restrict);
 
-            // Invoice -> SalesOrder (many..1)
+           
             b.Entity<Invoice>()
                 .HasOne(i => i.SalesOrder)
                 .WithMany(so => so.Invoices)
                 .HasForeignKey(i => i.SalesOrderID)
                 .OnDelete(DeleteBehavior.Restrict);
 
-            // Payment -> Invoice (many..1) and Payment -> Employee (ReceivedBy)
+          
             b.Entity<Payment>()
                 .HasOne(p => p.Invoice)
                 .WithMany(i => i.Payments)
@@ -107,18 +111,24 @@ namespace AutoSalonAPI.Data
                 .HasForeignKey(p => p.ReceivedBy)
                 .OnDelete(DeleteBehavior.Restrict);
 
-            // Feedback -> Customer
+            
             b.Entity<Feedback>()
                 .HasOne(fb => fb.Customer)
                 .WithMany(c => c.Feedbacks)
                 .HasForeignKey(fb => fb.CustomerID)
                 .OnDelete(DeleteBehavior.Restrict);
 
-            // Common indexes
+            
             b.Entity<Vehicle>().HasIndex(v => v.VIN).IsUnique();
             b.Entity<Invoice>().HasIndex(i => i.InvoiceNumber).IsUnique();
             b.Entity<Customer>().HasIndex(c => c.Email);
             b.Entity<Employee>().HasIndex(e => e.Email);
+
+            
+            b.Entity<User>()
+                .HasIndex(u => u.Email)
+                .IsUnique();
+            b.Entity<User>().HasIndex(u => u.Username).IsUnique();
         }
     }
 }

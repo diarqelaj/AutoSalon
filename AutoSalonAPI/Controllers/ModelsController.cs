@@ -19,23 +19,24 @@ namespace AutoSalonAPI.Controllers
         [HttpGet("{id:int}")]
         public async Task<ActionResult<Model>> Get(int id)
         {
-            var x = await _db.Models.FindAsync(id);
+            var x = await _db.Models.AsNoTracking().FirstOrDefaultAsync(m => m.ModelID == id);
             return x is null ? NotFound() : x;
         }
+
         [HttpGet("bodytypes")]
         public async Task<ActionResult<IEnumerable<string>>> GetBodyTypes()
         {
             var types = await _db.Models
                 .AsNoTracking()
-                .Select(m => m.BodyType!)
+                .Select(m => m.BodyType)
                 .Where(bt => bt != null && bt.Trim() != "")
+                .Select(bt => bt!)
                 .Distinct()
                 .OrderBy(bt => bt)
                 .ToListAsync();
 
             return types;
         }
-
 
         [HttpPost]
         public async Task<ActionResult<Model>> Create(Model item)

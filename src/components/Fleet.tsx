@@ -162,15 +162,16 @@ const Fleet = () => {
                 key={item.id}
                 className="group hover:shadow-luxury transition-all duration-500 border-luxury-charcoal hover:border-luxury-gold/50 bg-gradient-card overflow-hidden"
               >
-                <div className="relative">
-                  {/* eslint-disable-next-line @next/next/no-img-element */}
-                 <img
-                  src={item.imageUrl ?? fallbackImage}   // ← use per-car image when present
-                  alt={item.name}
-                  className="w-full h-64 object-cover group-hover:scale-105 transition-transform duration-500"
-                  loading="lazy"
-                  referrerPolicy="no-referrer"
-                />
+               <div className="relative h-64 bg-muted flex items-end justify-center px-3 pt-3">
+  <img
+    src={item.imageUrl ?? fallbackImage}
+    alt={item.name}
+    className="max-h-full w-auto object-contain origin-bottom transition-transform duration-500 group-hover:scale-[1.02]"
+    loading="lazy"
+    referrerPolicy="no-referrer"
+  />
+
+
                   <div className="absolute top-4 left-4">
                     <Badge className="bg-luxury-gold text-luxury-dark">
                       {normalizeCategory(item.category)}
