@@ -27,10 +27,10 @@ import {
 
 type ApiBrand = { brandID: number; name: string };
 
-// non-empty sentinel for "Any"
+
 const ANY = "__any";
 
-// normalize brand names for matching (case/spacing/dashes/underscores/dots)
+
 const norm = (s: string) => s.toLowerCase().replace(/[\s\-_.]/g, "");
 const WHITELIST = new Set(["bmw", "audi", "mercedesbenz", "porsche", "tesla"]);
 
@@ -42,10 +42,10 @@ const Hero = () => {
   const [loading, setLoading] = useState(true);
   const [err, setErr] = useState<string | null>(null);
 
-  // Form state (inventory filters)
+
   const [brand, setBrand] = useState<string>(ANY);
   const [body, setBody] = useState<string>(ANY);
-  const [budgetMax, setBudgetMax] = useState<string>(""); // EUR
+  const [budgetMax, setBudgetMax] = useState<string>("");
   const [yearMin, setYearMin] = useState<string>("");
 
   useEffect(() => {
@@ -79,7 +79,7 @@ const Hero = () => {
     };
   }, []);
 
-  // Brand badges (filter first by whitelist, then slice to 5; fallback to top 5)
+ 
   const whitelistedBadges = useMemo(
     () =>
       [...brands]

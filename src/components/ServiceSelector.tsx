@@ -29,7 +29,7 @@ const ServiceSelector = () => {
           </p>
         </div>
 
-        <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-4">
+        <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
           {/* Buy / Reserve */}
           <Card className="group hover:shadow-luxury transition-all duration-500 border-brand-charcoal hover:border-brand-white/50 bg-gradient-card">
             <CardContent className="p-6">
@@ -84,32 +84,7 @@ const ServiceSelector = () => {
             </CardContent>
           </Card>
 
-          {/* Trade-In / Sell */}
-          <Card className="group hover:shadow-luxury transition-all duration-500 border-brand-charcoal hover:border-brand-white/50 bg-gradient-card">
-            <CardContent className="p-6">
-              <div className="flex items-center justify-between mb-5">
-                <div className="p-3 bg-brand-white/10 rounded-xl">
-                  <Repeat2 className="w-7 h-7 text-brand-white" />
-                </div>
-                <span className="text-xs bg-brand-white/20 text-brand-white px-2.5 py-1 rounded-full">
-                  Instant offer
-                </span>
-              </div>
-              <h3 className="text-xl font-semibold mb-2">Trade-In or Sell</h3>
-              <p className="text-sm text-brand-gray">
-                Get a real offer in minutes. Use it toward your next car or cash out — no obligation.
-              </p>
-              <ul className="mt-4 space-y-2 text-sm text-brand-gray">
-                <li className="flex items-center gap-2"><Banknote className="w-4 h-4" /> Competitive pricing</li>
-                <li className="flex items-center gap-2"><Users className="w-4 h-4" /> Expert appraisal</li>
-              </ul>
-              <div className="mt-6">
-                <Button asChild variant="outline" className="w-full">
-                  <Link href="/trade-in">Get trade-in value <ArrowRight className="ml-2 w-4 h-4" /></Link>
-                </Button>
-              </div>
-            </CardContent>
-          </Card>
+          
 
           {/* Finance & Care */}
           <Card className="group hover:shadow-luxury transition-all duration-500 border-brand-charcoal hover:border-brand-white/50 bg-gradient-card">
