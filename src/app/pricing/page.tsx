@@ -7,34 +7,30 @@ import api from "@/lib/api";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
+import { Input } from "@/components/ui/input";
 import { Users, Luggage, Fuel, Zap, Star } from "lucide-react";
 
 const PAGE_SIZE = 9;
 const fallbackImage = "/luxury-fleet.jpg";
 
-// We SELL cars. basePrice is the price we show.
-// We'll also enrich each fleet item with `status` from /vehicles/:id
+
 type VehicleStatus = "Available" | "Reserved" | "Sold" | string;
 
 type FleetItem = {
   id: number;
   name: string;
   category: string | null;
-
-  // RENTAL FIELDS (ignored)
-  dailyRate?: number | null;
+ dailyRate?: number | null;
   pricePerDay?: number | null;
 
-  // SALE FIELDS (used; may be missing from /fleet)
   basePrice?: number | null;
 
   transmission: string;
   fuel: string;
-  available: boolean; // from /fleet (boolean)
+  available: boolean;
   imageUrl?: string | null;
   modelPageUrl?: string | null;
 
-  // we’ll attach this after fetching /vehicles/:id
   status?: VehicleStatus;
 };
 
@@ -97,6 +93,21 @@ async function runLimited<T>(tasks: Array<() => Promise<T>>, limit: number): Pro
 type FetchPrio = "high" | "low" | "auto";
 type PriorityImgEl = HTMLImageElement & { fetchPriority?: FetchPrio };
 
+// --- search helpers ---
+const norm = (s: string) =>
+  s.toLowerCase().normalize("NFD").replace(/\p{Diacritic}/gu, "").trim();
+
+const matches = (it: FleetItem, q: string) => {
+  if (!q) return true;
+  const n = norm(q);
+  return [
+    it.name,
+    it.category ?? "",
+    it.transmission ?? "",
+    it.fuel ?? "",
+  ].some((v) => norm(String(v)).includes(n));
+};
+
 export default function PricingPage() {
   const router = useRouter();
   const sp = useSearchParams();
@@ -111,14 +122,38 @@ export default function PricingPage() {
   const pageFromQS = Number(sp.get("page") || "1");
   const [page, setPage] = useState<number>(Number.isFinite(pageFromQS) && pageFromQS > 0 ? pageFromQS : 1);
 
+  // search query (URL-synced)
+  const [q, setQ] = useState<string>(sp.get("q") ?? "");
+   const searchRef = useRef<HTMLInputElement | null>(null);
+
+  // url-synced search
+
+
+  // focus if asked
+  useEffect(() => {
+    if (sp.get("autofocus") === "1" && searchRef.current) {
+      // small delay helps on mobile to ensure element is painted
+      setTimeout(() => searchRef.current?.focus(), 0);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [sp]);
+
   // preloading next page images when pager becomes visible
   const pagerRef = useRef<HTMLDivElement | null>(null);
   const hasPreloadedNextRef = useRef(false);
 
+  // keep page in sync with URL
   useEffect(() => {
     setPage(Number.isFinite(pageFromQS) && pageFromQS > 0 ? pageFromQS : 1);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [sp]);
+
+  // keep search in sync with URL
+  useEffect(() => {
+    setQ(sp.get("q") ?? "");
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [sp]);
+  
 
   useEffect(() => {
     let alive = true;
@@ -160,7 +195,6 @@ export default function PricingPage() {
                   it.id === m.id
                     ? {
                         ...it,
-                        // only override basePrice if we actually got a number
                         basePrice: typeof bp === "number" ? bp : it.basePrice ?? null,
                         status: status ?? it.status,
                       }
@@ -195,13 +229,16 @@ export default function PricingPage() {
     };
   }, []);
 
-  const totalPages = Math.max(1, Math.ceil(items.length / PAGE_SIZE));
+  // ------- FILTER -> PAGINATE -------
+  const filtered = useMemo(() => items.filter((it) => matches(it, q)), [items, q]);
+
+  const totalPages = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
   const safePage = Math.min(Math.max(1, page), totalPages);
 
   const paged = useMemo(() => {
     const start = (safePage - 1) * PAGE_SIZE;
-    return items.slice(start, start + PAGE_SIZE);
-  }, [items, safePage]);
+    return filtered.slice(start, start + PAGE_SIZE);
+  }, [filtered, safePage]);
 
   // Preload the first row of images to feel instant
   useEffect(() => {
@@ -222,7 +259,7 @@ export default function PricingPage() {
         const nextPage = safePage + 1;
         if (nextPage <= totalPages) {
           const start = (nextPage - 1) * PAGE_SIZE;
-          items.slice(start, start + PAGE_SIZE).forEach((it) => preloadImage(it.imageUrl ?? fallbackImage));
+          filtered.slice(start, start + PAGE_SIZE).forEach((it) => preloadImage(it.imageUrl ?? fallbackImage));
         }
 
         hasPreloadedNextRef.current = true;
@@ -233,7 +270,16 @@ export default function PricingPage() {
 
     io.observe(el);
     return () => io.disconnect();
-  }, [items, safePage, totalPages]);
+  }, [filtered, safePage, totalPages]);
+
+  const onSearchChange = (val: string) => {
+    setQ(val);
+    const qs = new URLSearchParams(sp.toString());
+    if (val) qs.set("q", val);
+    else qs.delete("q");
+    qs.set("page", "1"); // reset to first page on new search
+    router.replace(`/pricing?${qs.toString()}`);
+  };
 
   const gotoPage = (p: number) => {
     const clamped = Math.min(Math.max(1, p), totalPages);
@@ -278,14 +324,27 @@ export default function PricingPage() {
           <p className="text-lg text-muted-foreground mt-2">Select a car to view details and options.</p>
         </div>
 
+        {/* Search bar */}
+        <div className="mx-auto mb-8 max-w-2xl">
+          <Input
+            ref={searchRef}
+            value={q}
+            inputMode="search"
+            enterKeyHint="search"
+            onChange={(e) => onSearchChange(e.target.value)}
+            placeholder="Search by model, category, transmission, fuel…"
+            className="h-11"
+          />
+        </div>
+
         {loading && <div className="text-center text-muted-foreground">Loading vehicles…</div>}
         {err && !loading && <div className="text-center text-destructive mb-8">{err}</div>}
 
-        {!loading && !err && items.length === 0 && (
-          <div className="text-center text-muted-foreground">No vehicles available right now.</div>
+        {!loading && !err && filtered.length === 0 && (
+          <div className="text-center text-muted-foreground">No vehicles match “{q}”.</div>
         )}
 
-        {!loading && !err && items.length > 0 && (
+        {!loading && !err && filtered.length > 0 && (
           <>
             {/* 9 per page */}
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">

@@ -52,6 +52,19 @@ type Vehicle = {
   description?: string | null;
   imageUrl?: string | null;
 };
+type TestDrive = {
+  testDriveID: number;       
+  customerID: number | null; 
+  vehicleID: number | null;
+  employeeID: number | null;
+  scheduledAt: string;       
+  durationMin: number;      
+  status: string;            
+  notes?: string | null;
+  userId?: number | null;    
+  createdAt?: string;        
+  updatedAt?: string | null; 
+};
 
 type Model = {
   modelID: number;
@@ -167,6 +180,29 @@ function Tabs({
     </div>
   );
 }
+function toDateInputValue(iso: string | null | undefined) {
+  if (!iso) return "";
+  const d = new Date(iso);
+  const yyyy = d.getFullYear();
+  const mm = String(d.getMonth() + 1).padStart(2, "0");
+  const dd = String(d.getDate()).padStart(2, "0");
+  return `${yyyy}-${mm}-${dd}`;
+}
+function toTimeInputValue(iso: string | null | undefined) {
+  if (!iso) return "";
+  const d = new Date(iso);
+  const hh = String(d.getHours()).padStart(2, "0");
+  const mi = String(d.getMinutes()).padStart(2, "0");
+  return `${hh}:${mi}`;
+}
+function joinDateTimeLocal(dateStr: string, timeStr: string) {
+  // treat as local and convert to ISO
+  if (!dateStr || !timeStr) return null;
+  const [y, m, d] = dateStr.split("-").map(Number);
+  const [hh, mm] = timeStr.split(":").map(Number);
+  const local = new Date(y, (m ?? 1) - 1, d ?? 1, hh ?? 0, mm ?? 0, 0, 0);
+  return new Date(local.getTime() - local.getTimezoneOffset() * 60000).toISOString();
+}
 
 /* -----------------------------------------------------------
    Modal – minimal (pa portal)
@@ -212,7 +248,7 @@ function Modal({
 export default function AdminPage() {
   const router = useRouter();
   const [allowed, setAllowed] = useState<boolean | null>(null);
-  const [tab, setTab] = useState<"vehicles" | "models" | "brands" | "users" | "fleet" | "orders">("vehicles");
+  const [tab, setTab] = useState<"vehicles" | "models" | "brands" | "users" | "fleet" | "orders" |"testdrives" >("vehicles");
 
 
   useEffect(() => {
@@ -255,6 +291,8 @@ export default function AdminPage() {
           { id: "users", title: "Users" },
           { id: "fleet", title: "Fleet" },
           { id: "orders", title: "Orders" },
+         
+
 
         ]}
       />
@@ -266,6 +304,7 @@ export default function AdminPage() {
         {tab === "users" && <UsersPanel />}
         {tab === "fleet" && <FleetPanel />}
         {tab === "orders" && <OrdersPanel />} 
+       
       </div>
     </section>
   );
@@ -383,6 +422,334 @@ function OrderModal({
     </Modal>
   );
 }
+/* ===========================================================
+   TEST DRIVES — LIST PANEL
+=========================================================== */
+function TestDrivesPanel() {
+  // filters + paging
+  const [page, setPage] = useState(1);
+  const [pageSize, setPageSize] = useState(20);
+  const [q, setQ] = useState("");
+  const [dateFrom, setDateFrom] = useState<string>("");
+  const [dateTo, setDateTo] = useState<string>("");
+  const [status, setStatus] = useState<string>(""); // optional filter
+
+  // data
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [rows, setRows] = useState<TestDrive[]>([]);
+  const [total, setTotal] = useState(0);
+  const totalPages = Math.max(1, Math.ceil(total / pageSize));
+
+  const load = async () => {
+    try {
+      setLoading(true);
+      setError(null);
+      const url =
+        `/testdrives?page=${page}&pageSize=${pageSize}` +
+        (q ? `&q=${encodeURIComponent(q)}` : "") +
+        (dateFrom ? `&dateFrom=${encodeURIComponent(dateFrom)}` : "") +
+        (dateTo ? `&dateTo=${encodeURIComponent(dateTo)}` : "") +
+        (status ? `&status=${encodeURIComponent(status)}` : "");
+      const res = await api.get<PagedResult<TestDrive>>(url);
+      setRows(res.data.items);
+      setTotal(res.data.totalItems);
+    } catch {
+      setError("Failed to load test drives.");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    void load();
+    const onFocus = () => void load();
+    window.addEventListener("focus", onFocus);
+    return () => window.removeEventListener("focus", onFocus);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [page, pageSize]); // search triggers by button
+
+  const handleDelete = async (id: number) => {
+    const snapshot = rows;
+    setRows((prev) => prev.filter((x) => x.testDriveID !== id));
+    try {
+      await api.delete(`/testdrives/${id}`);
+      if (total - 1 <= (page - 1) * pageSize && page > 1) setPage(page - 1);
+      else void load();
+    } catch {
+      setRows(snapshot);
+    }
+  };
+
+  // modal state
+  const [open, setOpen] = useState(false);
+  const [editing, setEditing] = useState<TestDrive | null>(null);
+  const startNew = () => {
+    setEditing(null);
+    setOpen(true);
+  };
+  const startEdit = (td: TestDrive) => {
+    setEditing(td);
+    setOpen(true);
+  };
+
+  return (
+    <Card className="border-border">
+      <CardContent className="p-5">
+        {/* Filter bar */}
+        <div className="mb-5 grid grid-cols-1 lg:grid-cols-[1fr_auto_auto_auto_auto_auto] gap-3">
+          <Input
+            className="w-full"
+            placeholder="Search by notes / employee / vehicle…"
+            value={q}
+            onChange={(e) => setQ(e.target.value)}
+          />
+          <Input type="date" value={dateFrom} onChange={(e) => setDateFrom(e.target.value)} title="From" />
+          <Input type="date" value={dateTo} onChange={(e) => setDateTo(e.target.value)} title="To" />
+          <select
+            className="h-9 rounded-md border border-input bg-background px-2 text-sm"
+            value={status}
+            onChange={(e) => setStatus(e.target.value)}
+            title="Status"
+          >
+            <option value="">All statuses</option>
+            <option value="Scheduled">Scheduled</option>
+            <option value="Confirmed">Confirmed</option>
+            <option value="Completed">Completed</option>
+            <option value="Cancelled">Cancelled</option>
+            <option value="NoShow">NoShow</option>
+          </select>
+          <Button
+            variant="outline"
+            onClick={() => {
+              setPage(1);
+              void load();
+            }}
+          >
+            Search
+          </Button>
+          <Button onClick={startNew}>
+            <Plus className="w-4 h-4 mr-2" />
+            New Test Drive
+          </Button>
+        </div>
+
+        {loading && <div className="text-muted-foreground">Loading test drives…</div>}
+        {error && <div className="text-destructive">{error}</div>}
+
+        {!loading && !error && (
+          <>
+            <div className="overflow-x-auto">
+              <table className="w-full text-sm">
+                <thead>
+                  <tr className="text-left border-b border-border">
+                    <th className="py-2 pr-3">ID</th>
+                    <th className="py-2 pr-3">Scheduled</th>
+                    <th className="py-2 pr-3">Duration</th>
+                    <th className="py-2 pr-3">VehicleID</th>
+                    <th className="py-2 pr-3">EmployeeID</th>
+                    <th className="py-2 pr-3">Status</th>
+                    <th className="py-2 pr-3">Notes</th>
+                    <th className="py-2 pr-0 text-right">Actions</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {rows.map((td) => (
+                    <tr key={td.testDriveID} className="border-b border-border/70 align-top">
+                      <td className="py-2 pr-3 font-mono">#{td.testDriveID}</td>
+                      <td className="py-2 pr-3">{new Date(td.scheduledAt).toLocaleString()}</td>
+                      <td className="py-2 pr-3">{td.durationMin} min</td>
+                      <td className="py-2 pr-3">{td.vehicleID ?? "—"}</td>
+                      <td className="py-2 pr-3">{td.employeeID ?? "—"}</td>
+                      <td className="py-2 pr-3">
+                        <Badge variant="outline">{td.status}</Badge>
+                      </td>
+                      <td className="py-2 pr-3 max-w-[34ch] truncate" title={td.notes ?? ""}>
+                        {td.notes ?? "—"}
+                      </td>
+                      <td className="py-2 pl-3">
+                        <div className="flex justify-end gap-2">
+                          <Button variant="outline" size="sm" onClick={() => startEdit(td)}>
+                            <Pencil className="w-4 h-4 mr-1" />
+                            Edit
+                          </Button>
+                          <Button variant="destructive" size="sm" onClick={() => handleDelete(td.testDriveID)}>
+                            <Trash2 className="w-4 h-4 mr-1" />
+                            Delete
+                          </Button>
+                        </div>
+                      </td>
+                    </tr>
+                  ))}
+                  {rows.length === 0 && (
+                    <tr>
+                      <td colSpan={8} className="py-6 text-center text-muted-foreground">
+                        No test drives found.
+                      </td>
+                    </tr>
+                  )}
+                </tbody>
+              </table>
+            </div>
+
+            {/* Pager */}
+            <div className="mt-4 flex items-center justify-between text-sm">
+              <span className="text-muted-foreground">
+                Page {page} / {totalPages} • {total.toLocaleString()} test drives
+              </span>
+              <div className="flex items-center gap-2">
+                <select
+                  className="h-9 rounded-md border border-input bg-background px-2 text-sm"
+                  value={pageSize}
+                  onChange={(e) => {
+                    setPageSize(Number(e.target.value));
+                    setPage(1);
+                  }}
+                >
+                  <option value={10}>10</option>
+                  <option value={20}>20</option>
+                  <option value={50}>50</option>
+                </select>
+                <Button variant="outline" size="sm" disabled={page <= 1} onClick={() => setPage((p) => p - 1)}>
+                  Prev
+                </Button>
+                <Button variant="outline" size="sm" disabled={page >= totalPages} onClick={() => setPage((p) => p + 1)}>
+                  Next
+                </Button>
+              </div>
+            </div>
+          </>
+        )}
+      </CardContent>
+
+      <TestDriveModal
+        open={open}
+        onClose={() => setOpen(false)}
+        editing={editing}
+        onSaved={() => void load()}
+      />
+    </Card>
+  );
+}
+
+/* ===========================================================
+   TEST DRIVES — MODAL
+=========================================================== */
+function TestDriveModal({
+  open,
+  onClose,
+  editing,
+  onSaved,
+}: {
+  open: boolean;
+  onClose: () => void;
+  editing: TestDrive | null;
+  onSaved: () => void;
+}) {
+  const isEdit = !!editing;
+
+  // local form state
+  const [vehicleID, setVehicleID] = useState<number | null>(editing?.vehicleID ?? null);
+  const [employeeID, setEmployeeID] = useState<number | null>(editing?.employeeID ?? null);
+  const [date, setDate] = useState<string>(toDateInputValue(editing?.scheduledAt));
+  const [time, setTime] = useState<string>(toTimeInputValue(editing?.scheduledAt));
+  const [durationMin, setDurationMin] = useState<number>(editing?.durationMin ?? 30);
+  const [status, setStatus] = useState<string>(editing?.status ?? "Scheduled");
+  const [notes, setNotes] = useState<string>(editing?.notes ?? "");
+
+  useEffect(() => {
+    if (open) {
+      setVehicleID(editing?.vehicleID ?? null);
+      setEmployeeID(editing?.employeeID ?? null);
+      setDate(toDateInputValue(editing?.scheduledAt));
+      setTime(toTimeInputValue(editing?.scheduledAt));
+      setDurationMin(editing?.durationMin ?? 30);
+      setStatus(editing?.status ?? "Scheduled");
+      setNotes(editing?.notes ?? "");
+    }
+  }, [open, editing]);
+
+  if (!open) return null;
+
+  const payload = {
+    vehicleID,
+    employeeID,
+    scheduledAt: joinDateTimeLocal(date, time), // ISO or null
+    durationMin,
+    status,
+    notes: notes || null,
+  };
+
+  const save = async () => {
+    try {
+      if (isEdit) {
+        await api.put(`/testdrives/${editing!.testDriveID}`, payload);
+      } else {
+        await api.post(`/testdrives`, payload);
+      }
+      onSaved();
+      onClose();
+    } catch {
+      // TODO: toast error
+    }
+  };
+
+  return (
+    <Modal
+      open={open}
+      onClose={onClose}
+      title={isEdit ? `Edit Test Drive #${editing?.testDriveID}` : "New Test Drive"}
+      footer={
+        <>
+          <Button variant="outline" onClick={onClose}>Cancel</Button>
+          <Button onClick={save}>{isEdit ? "Save changes" : "Create"}</Button>
+        </>
+      }
+    >
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+        <Input
+          type="number"
+          placeholder="VehicleID (optional)"
+          value={vehicleID ?? ""}
+          onChange={(e) => setVehicleID(e.target.value === "" ? null : Number(e.target.value))}
+        />
+        <Input
+          type="number"
+          placeholder="EmployeeID (optional)"
+          value={employeeID ?? ""}
+          onChange={(e) => setEmployeeID(e.target.value === "" ? null : Number(e.target.value))}
+        />
+        <Input type="date" value={date} onChange={(e) => setDate(e.target.value)} />
+        <Input type="time" value={time} onChange={(e) => setTime(e.target.value)} />
+        <Input
+          type="number"
+          placeholder="Duration (min)"
+          value={durationMin}
+          onChange={(e) => setDurationMin(Number(e.target.value))}
+        />
+        <select
+          className="h-10 w-full rounded-md border border-input bg-background px-3 text-sm"
+          value={status}
+          onChange={(e) => setStatus(e.target.value)}
+        >
+          <option value="Scheduled">Scheduled</option>
+          <option value="Confirmed">Confirmed</option>
+          <option value="Completed">Completed</option>
+          <option value="Cancelled">Cancelled</option>
+          <option value="NoShow">NoShow</option>
+        </select>
+        <div className="md:col-span-2">
+          <Textarea
+            placeholder="Notes"
+            value={notes}
+            onChange={(e) => setNotes(e.target.value)}
+          />
+        </div>
+      </div>
+    </Modal>
+  );
+}
+
 /* ===========================================================
    ORDERS (Sales) — LIST PANEL
 =========================================================== */

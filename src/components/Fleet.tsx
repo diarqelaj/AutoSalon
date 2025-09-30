@@ -1,10 +1,9 @@
 // src/components/Fleet.tsx
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect,  useRef,useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import api from "@/lib/api";
-
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -12,15 +11,15 @@ import { Users, Luggage, Fuel, Zap, Star } from "lucide-react";
 
 const fallbackImage = "/luxury-fleet.jpg";
 
-// kom: këtu s’jemi me qera; fusim basePrice (nga /vehicles/:id)
+// ---- Types ----
 type FleetItem = {
   id: number;
   name: string;
   category: string | null;
-  basePrice?: number | null; // <- mbushet nga /vehicles/:id
+  basePrice?: number | null; // filled from /vehicles/:id
   transmission: string;
   fuel: string;
-  available: boolean;        // nqs s’kini status, përdoreni këtë
+  available: boolean;
   imageUrl?: string | null;
   modelPageUrl?: string | null;
 };
@@ -31,7 +30,7 @@ const eur = new Intl.NumberFormat(undefined, {
   maximumFractionDigits: 0,
 });
 
-// kom: normalizim i kategorisë – kozmetik
+// ---- Helpers ----
 function normalizeCategory(raw?: string | null): string {
   if (!raw) return "Other";
   const s = raw.toLowerCase().replace(/\s+/g, " ").trim();
@@ -49,13 +48,11 @@ function normalizeCategory(raw?: string | null): string {
     .join(" ");
 }
 
-// kom: sigurohu mos kthejmë "" te src e imazhit
 const safeImageSrc = (src?: string | null): string | null => {
   const s = (src ?? "").trim();
   return s.length > 0 ? s : fallbackImage;
 };
 
-// kom: limiter i thjeshtë – mos e godasim API fort
 async function runLimited<T>(tasks: Array<() => Promise<T>>, limit: number): Promise<T[]> {
   const results: T[] = [];
   let i = 0;
@@ -70,6 +67,129 @@ async function runLimited<T>(tasks: Array<() => Promise<T>>, limit: number): Pro
   return results;
 }
 
+const MAX_TO_SHOW = 3;
+
+function Spinner({ size = 28, className = "" }: { size?: number; className?: string }) {
+  return (
+    <div
+      className={`inline-block animate-spin rounded-full border-2 border-muted-foreground/40 border-t-transparent ${className}`}
+      style={{ width: size, height: size }}
+      aria-label="Loading"
+      role="status"
+    />
+  );
+}
+
+// --- Image with spinner overlay ---
+function ImageWithSpinner({
+  src,
+  alt,
+  className,
+}: {
+  src: string | null;
+  alt: string;
+  className?: string;
+}) {
+  const imgRef = useRef<HTMLImageElement | null>(null);
+  const [imgSrc, setImgSrc] = useState<string | null>(src);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    setImgSrc(src);
+    setLoading(true);
+  }, [src]);
+
+  // handle cached images
+  useEffect(() => {
+    const el = imgRef.current;
+    if (!el) return;
+    if (el.complete && el.naturalWidth > 0) {
+      setLoading(false);
+    }
+  }, [imgSrc]);
+
+  return (
+    <div className="relative h-64 bg-muted flex items-end justify-center px-3 pt-3">
+      {/* eslint-disable-next-line @next/next/no-img-element */}
+      <img
+        ref={imgRef}
+        src={imgSrc ?? undefined}
+        alt={alt}
+        className={`max-h-full w-auto object-contain origin-bottom transition-opacity duration-300 ${className ?? ""} ${loading ? "opacity-0" : "opacity-100"}`}
+        loading="lazy"           // use 'lazy' so the spinner actually appears before the image is fetched
+        decoding="async"
+        referrerPolicy="no-referrer"
+        onLoad={() => setLoading(false)}
+        onError={(e) => {
+          const el = e.currentTarget as HTMLImageElement;
+          if (el.src !== "/luxury-fleet.jpg") {
+            el.src = "/luxury-fleet.jpg"; // fallback
+          }
+          setLoading(false);
+        }}
+      />
+
+      {/* Spinner overlay ONLY while loading */}
+      {loading && (
+        <div className="pointer-events-none absolute inset-0 z-20 flex items-center justify-center bg-background/30 backdrop-blur-[2px]">
+          <Spinner size={32} />
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ---- Skeletons ----
+function SkeletonPill({ className = "" }: { className?: string }) {
+  return <div className={`rounded-full bg-muted animate-pulse ${className}`} />;
+}
+function SkeletonLine({ className = "" }: { className?: string }) {
+  return <div className={`h-4 rounded bg-muted animate-pulse ${className}`} />;
+}
+function SkeletonSpecRow({ icon, width = "w-24" }: { icon: React.ReactNode; width?: string }) {
+  return (
+    <div className="flex items-center gap-2">
+      <div className="opacity-40">{icon}</div>
+      <SkeletonLine className={width} />
+    </div>
+  );
+}
+function SkeletonCard() {
+  return (
+    <Card className="border-luxury-charcoal bg-gradient-card overflow-hidden">
+      <div className="relative h-64 bg-muted">
+        <div className="absolute inset-0 animate-pulse bg-gradient-to-r from-muted via-muted/70 to-muted" />
+        <div className="absolute top-4 left-4">
+          <SkeletonPill className="h-6 w-24" />
+        </div>
+        <div className="absolute top-4 right-4">
+          <div className="flex items-center gap-1 bg-background/90 backdrop-blur-sm px-2 py-1 rounded-full">
+            <Star className="w-3 h-3 text-luxury-gold opacity-40" />
+            <SkeletonLine className="h-3 w-8" />
+          </div>
+        </div>
+      </div>
+      <CardContent className="p-6">
+        <div className="flex items-center justify-between mb-3">
+          <SkeletonLine className="h-5 w-40" />
+          <SkeletonLine className="h-5 w-24" />
+        </div>
+        <div className="grid grid-cols-2 gap-3 mb-4 text-sm">
+          <SkeletonSpecRow icon={<Users className="w-4 h-4" />} width="w-20" />
+          <SkeletonSpecRow icon={<Luggage className="w-4 h-4" />} width="w-16" />
+          <SkeletonSpecRow icon={<Zap className="w-4 h-4" />} width="w-24" />
+          <SkeletonSpecRow icon={<Fuel className="w-4 h-4" />} width="w-20" />
+        </div>
+        <div className="space-y-2">
+          <SkeletonLine className="h-10 w-full" />
+          <SkeletonLine className="h-10 w-full" />
+        </div>
+      </CardContent>
+    </Card>
+  );
+}
+
+// ---- Component ----
 export default function Fleet() {
   const router = useRouter();
 
@@ -77,8 +197,6 @@ export default function Fleet() {
   const [loading, setLoading] = useState(true);
   const [err, setErr] = useState<string | null>(null);
   const [activeCat, setActiveCat] = useState<string>("All Vehicles");
-
-  // kom: mbajmë track kush po mbushet me basePrice – mos tregoj “Contact” si perfundim
   const [fillingIds, setFillingIds] = useState<Set<number>>(new Set());
 
   useEffect(() => {
@@ -88,13 +206,11 @@ export default function Fleet() {
         setLoading(true);
         setErr(null);
 
-        // 1) marrim listën e flotës (info vizuale)
         const res = await api.get<FleetItem[]>("/vehicles/fleet");
         if (!alive) return;
         const list = res.data ?? [];
         setItems(list);
 
-        // 2) per çdo item, merr basePrice nga /vehicles/:id (shiten, jo me qera)
         const missing = list.filter((x) => !(x.basePrice != null && x.basePrice > 0));
         if (missing.length > 0) {
           setFillingIds(new Set(missing.map((m) => m.id)));
@@ -104,8 +220,6 @@ export default function Fleet() {
               const r = await api.get<{ basePrice?: number | null; status?: string }>(`/vehicles/${m.id}`);
               if (!alive) return null;
               const bp = r?.data?.basePrice ?? null;
-
-              // ndreq item-in ne vend
               setItems((prev) => prev.map((it) => (it.id === m.id ? { ...it, basePrice: bp } : it)));
               return bp;
             } catch {
@@ -151,11 +265,12 @@ export default function Fleet() {
     return items.filter((i) => normalizeCategory(i.category) === activeCat);
   }, [items, activeCat]);
 
+  const displayItems = useMemo(() => filtered.slice(0, MAX_TO_SHOW), [filtered]);
+
   const renderPrice = (it: FleetItem) => {
     if (it.basePrice != null && it.basePrice > 0) {
       return <span className="text-luxury-gold font-semibold">{eur.format(it.basePrice)}</span>;
     }
-    // kom: nese jemi tu e marrë basePrice, trego “…” për pak
     if (fillingIds.has(it.id)) return <span className="text-muted-foreground">…</span>;
     return <span className="text-muted-foreground">Contact for price</span>;
   };
@@ -172,8 +287,8 @@ export default function Fleet() {
           </p>
         </div>
 
-        {/* Tabs – kom: thjesht filter, mos e komplikojm */}
-        <div className="flex flex-wrap justify-center gap-4 mb-12">
+        {/* tabs */}
+        <div className="flex flex-wrap justify-center gap-4 mb-12" role="tablist" aria-label="Fleet categories">
           {categories.map((category) => {
             const active = category === activeCat;
             return (
@@ -187,6 +302,7 @@ export default function Fleet() {
                 }
                 onClick={() => setActiveCat(category)}
                 aria-pressed={active}
+                role="tab"
               >
                 {category}
               </Button>
@@ -194,115 +310,114 @@ export default function Fleet() {
           })}
         </div>
 
-        {loading && <div className="text-center text-muted-foreground">Loading fleet…</div>}
         {err && !loading && <div className="text-center text-destructive mb-8">{err}</div>}
 
-        {!loading && !err && (
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
-            {filtered.map((item) => {
-              const imgSrc = safeImageSrc(item.imageUrl);
-              return (
-                <Card
-                  key={item.id}
-                  className="group hover:shadow-luxury transition-all duration-500 border-luxury-charcoal hover:border-luxury-gold/50 bg-gradient-card overflow-hidden"
-                >
-                  <div className="relative h-64 bg-muted flex items-end justify-center px-3 pt-3">
-                    {imgSrc ? (
-                      // eslint-disable-next-line @next/next/no-img-element
-                      <img
-                        src={imgSrc}
-                        alt={item.name}
-                        className="max-h-full w-auto object-contain origin-bottom transition-transform duration-500 group-hover:scale-[1.02]"
-                        loading="lazy"
-                        decoding="async"
-                        referrerPolicy="no-referrer"
-                        onError={(e) => {
-                          const el = e.currentTarget as HTMLImageElement;
-                          if (el.src !== fallbackImage) el.src = fallbackImage;
-                        }}
-                      />
-                    ) : null}
-
-                    <div className="absolute top-4 left-4">
-                      <Badge className="bg-luxury-gold text-luxury-dark">
-                        {normalizeCategory(item.category)}
-                      </Badge>
-                    </div>
-                    <div className="absolute top-4 right-4">
-                      <div className="flex items-center gap-1 bg-background/90 backdrop-blur-sm px-2 py-1 rounded-full">
-                        <Star className="w-3 h-3 text-luxury-gold fill-current" />
-                        <span className="text-sm font-medium">4.8</span>
-                      </div>
-                    </div>
-
-                    {!item.available && (
-                      // kom: gri/overlay kur s’është në dispozicion (p.sh. Reserved/Sold)
-                      <div className="absolute inset-0 bg-neutral-900/35 flex items-center justify-center">
-                        <Badge className="bg-neutral-700/90 text-neutral-100">Currently Unavailable</Badge>
-                      </div>
-                    )}
-                  </div>
-
-                  <CardContent className="p-6">
-                    <div className="flex items-center justify-between mb-3">
-                      <h3 className="text-xl font-serif font-semibold">{item.name}</h3>
-                      {renderPrice(item)}
-                    </div>
-
-                    {/* Specs – placeholder, nqs i keni sakta prej API, ndërroni */}
-                    <div className="grid grid-cols-2 gap-3 mb-4 text-sm">
-                      <div className="flex items-center gap-2">
-                        <Users className="w-4 h-4 text-luxury-gray" />
-                        <span>5 Seats</span>
-                      </div>
-                      <div className="flex items-center gap-2">
-                        <Luggage className="w-4 h-4 text-luxury-gray" />
-                        <span>3 Bags</span>
-                      </div>
-                      <div className="flex items-center gap-2">
-                        <Zap className="w-4 h-4 text-luxury-gray" />
-                        <span>{item.transmission}</span>
-                      </div>
-                      <div className="flex items-center gap-2">
-                        <Fuel className="w-4 h-4 text-luxury-gray" />
-                        <span>{item.fuel}</span>
-                      </div>
-                    </div>
-
-                    {/* Actions – shitje, jo booking/qera */}
-                    <div className="space-y-2">
-                      <Button
-                        className="w-full bg-gradient-luxury text-luxury-dark hover:shadow-glow transition-all"
-                        onClick={() => router.push(`/vehicles/${item.id}`)}
-                      >
-                        View Details
-                      </Button>
-                      <Button
-                        variant="outline"
-                        className="w-full border-luxury-charcoal text-luxury-gray hover:border-luxury-gold hover:text-luxury-gold"
-                        onClick={() => router.push(`/contact?vehicleId=${item.id}`)}
-                      >
-                        Contact Sales
-                      </Button>
-                    </div>
-                  </CardContent>
-                </Card>
-              );
-            })}
+        {/* skeletons */}
+        {loading && (
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8" aria-live="polite" aria-busy="true">
+            <SkeletonCard />
+            <SkeletonCard />
+            <SkeletonCard />
           </div>
         )}
 
+        {/* cards */}
         {!loading && !err && (
-          <div className="text-center mt-12">
-            <Button
-              variant="outline"
-              size="lg"
-              className="border-luxury-gold text-luxury-gold hover:bg-luxury-gold hover:text-luxury-dark"
-              onClick={() => router.push("/pricing")}
-            >
-              View Complete Fleet
-            </Button>
-          </div>
+          <>
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
+              {displayItems.map((item) => {
+                const imgSrc = safeImageSrc(item.imageUrl);
+                return (
+                  <Card
+                    key={item.id}
+                    className="group hover:shadow-luxury transition-all duration-500 border-luxury-charcoal hover:border-luxury-gold/50 bg-gradient-card overflow-hidden"
+                  >
+                    {/* image with circular loader */}
+                    <div className="relative">
+                      <ImageWithSpinner
+                        src={imgSrc}
+                        alt={item.name}
+                        className="group-hover:scale-[1.02]"
+                      />
+
+                      {/* top-left badge */}
+                      <div className="absolute top-4 left-4">
+                        <Badge className="bg-luxury-gold text-luxury-dark">
+                          {normalizeCategory(item.category)}
+                        </Badge>
+                      </div>
+                      {/* top-right rating */}
+                      <div className="absolute top-4 right-4">
+                        <div className="flex items-center gap-1 bg-background/90 backdrop-blur-sm px-2 py-1 rounded-full">
+                          <Star className="w-3 h-3 text-luxury-gold fill-current" />
+                          <span className="text-sm font-medium">4.8</span>
+                        </div>
+                      </div>
+
+                      {!item.available && (
+                        <div className="absolute inset-0 bg-neutral-900/35 flex items-center justify-center">
+                          <Badge className="bg-neutral-700/90 text-neutral-100">Currently Unavailable</Badge>
+                        </div>
+                      )}
+                    </div>
+
+                    <CardContent className="p-6">
+                      <div className="flex items-center justify-between mb-3">
+                        <h3 className="text-xl font-serif font-semibold">{item.name}</h3>
+                        {renderPrice(item)}
+                      </div>
+
+                      <div className="grid grid-cols-2 gap-3 mb-4 text-sm">
+                        <div className="flex items-center gap-2">
+                          <Users className="w-4 h-4 text-luxury-gray" />
+                          <span>5 Seats</span>
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <Luggage className="w-4 h-4 text-luxury-gray" />
+                          <span>3 Bags</span>
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <Zap className="w-4 h-4 text-luxury-gray" />
+                          <span>{item.transmission}</span>
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <Fuel className="w-4 h-4 text-luxury-gray" />
+                          <span>{item.fuel}</span>
+                        </div>
+                      </div>
+
+                      <div className="space-y-2">
+                        <Button
+                          className="w-full bg-gradient-luxury text-luxury-dark hover:shadow-glow transition-all"
+                          onClick={() => router.push(`/vehicles/${item.id}`)}
+                        >
+                          View Details
+                        </Button>
+                        <Button
+                          variant="outline"
+                          className="w-full border-luxury-charcoal text-luxury-gray hover:border-luxury-gold hover:text-luxury-gold"
+                          onClick={() => router.push(`/contact?vehicleId=${item.id}`)}
+                        >
+                          Contact Sales
+                        </Button>
+                      </div>
+                    </CardContent>
+                  </Card>
+                );
+              })}
+            </div>
+
+            <div className="text-center mt-12">
+              <Button
+                variant="outline"
+                size="lg"
+                className="border-luxury-gold text-luxury-gold hover:bg-luxury-gold hover:text-luxury-dark"
+                onClick={() => router.push("/pricing")}
+              >
+                View Complete Fleet
+              </Button>
+            </div>
+          </>
         )}
       </div>
     </section>

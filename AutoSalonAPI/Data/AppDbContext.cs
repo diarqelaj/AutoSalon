@@ -10,7 +10,7 @@ namespace AutoSalonAPI.Data
         public DbSet<Brand> Brands => Set<Brand>();
         public DbSet<Model> Models => Set<Model>();
         public DbSet<Vehicle> Vehicles => Set<Vehicle>();
-        public DbSet<Sale> Sales { get; set; }   
+        public DbSet<Sale> Sales => Set<Sale>();
         public DbSet<Customer> Customers => Set<Customer>();
         public DbSet<Employee> Employees => Set<Employee>();
         public DbSet<Review> Reviews => Set<Review>();
@@ -19,39 +19,34 @@ namespace AutoSalonAPI.Data
         public DbSet<Invoice> Invoices => Set<Invoice>();
         public DbSet<Payment> Payments => Set<Payment>();
         public DbSet<Feedback> Feedbacks => Set<Feedback>();
-
-        // NEW: users for auth
         public DbSet<User> Users => Set<User>();
 
-        // *** ADDED: Lecturers/Lectures (Exam module)
+        // Exam module
         public DbSet<Lecturer> Lecturers => Set<Lecturer>();
         public DbSet<Lecture> Lectures => Set<Lecture>();
 
         protected override void OnModelCreating(ModelBuilder b)
         {
-            // Brendt -> Modeli (1...shume)
+            // Brand -> Model (1..many)
             b.Entity<Model>()
                 .HasOne(m => m.Brand)
                 .WithMany(br => br.Models)
                 .HasForeignKey(m => m.BrandID)
                 .OnDelete(DeleteBehavior.Restrict);
 
-            // Modeli -> Vetura (1..shume)
+            // Model -> Vehicle (1..many)
             b.Entity<Vehicle>()
                 .HasOne(v => v.Model)
                 .WithMany(m => m.Vehicles)
                 .HasForeignKey(v => v.ModelID)
                 .OnDelete(DeleteBehavior.Restrict);
 
-            // Klienti -> Vleresimi (1..shume) & Vetura -> Vleresimi (1..shume)
+            // Review relations
             b.Entity<Review>()
                 .HasOne(r => r.Customer)
                 .WithMany(c => c.Reviews)
                 .HasForeignKey(r => r.CustomerID)
                 .OnDelete(DeleteBehavior.Restrict);
-
-            b.Entity<Brand>().HasIndex(x => x.ImaginMake);
-            b.Entity<Model>().HasIndex(x => x.ImaginModelFamily);
 
             b.Entity<Review>()
                 .HasOne(r => r.Vehicle)
@@ -59,24 +54,18 @@ namespace AutoSalonAPI.Data
                 .HasForeignKey(r => r.VehicleID)
                 .OnDelete(DeleteBehavior.Restrict);
 
-            b.Entity<TestDrive>()
-                .HasOne(t => t.Customer)
-                .WithMany(c => c.TestDrives)
-                .HasForeignKey(t => t.CustomerID)
-                .OnDelete(DeleteBehavior.Restrict);
+            // Useful indexes
+            b.Entity<Brand>().HasIndex(x => x.ImaginMake);
+            b.Entity<Model>().HasIndex(x => x.ImaginModelFamily);
+            b.Entity<Vehicle>().HasIndex(v => v.VIN).IsUnique();
+            b.Entity<Invoice>().HasIndex(i => i.InvoiceNumber).IsUnique();
+            b.Entity<Customer>().HasIndex(c => c.Email);
+            b.Entity<Employee>().HasIndex(e => e.Email);
 
-            b.Entity<TestDrive>()
-                .HasOne(t => t.Vehicle)
-                .WithMany(v => v.TestDrives)
-                .HasForeignKey(t => t.VehicleID)
-                .OnDelete(DeleteBehavior.Restrict);
+            b.Entity<User>().HasIndex(u => u.Email).IsUnique();
+            b.Entity<User>().HasIndex(u => u.Username).IsUnique();
 
-            b.Entity<TestDrive>()
-                .HasOne(t => t.Employee)
-                .WithMany(e => e.TestDrives)
-                .HasForeignKey(t => t.EmployeeID)
-                .OnDelete(DeleteBehavior.Restrict);
-
+            // SalesOrder relations
             b.Entity<SalesOrder>()
                 .HasOne(so => so.Customer)
                 .WithMany(c => c.SalesOrders)
@@ -95,12 +84,14 @@ namespace AutoSalonAPI.Data
                 .HasForeignKey(so => so.EmployeeID)
                 .OnDelete(DeleteBehavior.Restrict);
 
+            // Invoice relations
             b.Entity<Invoice>()
                 .HasOne(i => i.SalesOrder)
                 .WithMany(so => so.Invoices)
                 .HasForeignKey(i => i.SalesOrderID)
                 .OnDelete(DeleteBehavior.Restrict);
 
+            // Payment relations
             b.Entity<Payment>()
                 .HasOne(p => p.Invoice)
                 .WithMany(i => i.Payments)
@@ -113,23 +104,78 @@ namespace AutoSalonAPI.Data
                 .HasForeignKey(p => p.ReceivedBy)
                 .OnDelete(DeleteBehavior.Restrict);
 
+            // Feedback relation
             b.Entity<Feedback>()
                 .HasOne(fb => fb.Customer)
                 .WithMany(c => c.Feedbacks)
                 .HasForeignKey(fb => fb.CustomerID)
                 .OnDelete(DeleteBehavior.Restrict);
 
-            b.Entity<Vehicle>().HasIndex(v => v.VIN).IsUnique();
-            b.Entity<Invoice>().HasIndex(i => i.InvoiceNumber).IsUnique();
-            b.Entity<Customer>().HasIndex(c => c.Email);
-            b.Entity<Employee>().HasIndex(e => e.Email);
+            // Sale mapping
+            b.Entity<Sale>(e =>
+            {
+                e.HasKey(x => x.SaleID);
+                e.Property(x => x.Price).HasColumnType("decimal(18,2)");
+                e.Property(x => x.BuyerName).HasMaxLength(150).IsRequired();
+                e.Property(x => x.BuyerEmail).HasMaxLength(200).IsRequired();
+                e.Property(x => x.BuyerPhone).HasMaxLength(50);
+                e.Property(x => x.PaintDescription).HasMaxLength(100);
+                e.Property(x => x.Angle).HasMaxLength(10);
 
-            b.Entity<User>()
-                .HasIndex(u => u.Email)
-                .IsUnique();
-            b.Entity<User>().HasIndex(u => u.Username).IsUnique();
+                e.HasOne<Vehicle>()
+                 .WithMany()
+                 .HasForeignKey(x => x.VehicleID)
+                 .OnDelete(DeleteBehavior.Restrict);
+            });
 
-            // hartimi i Ligjeruesve
+            // TestDrive mapping — single authoritative block
+            b.Entity<TestDrive>(e =>
+            {
+                e.ToTable("TestDrives");
+
+                // PK: entity Id -> DB TestDriveID
+                e.HasKey(t => t.Id);
+                e.Property(t => t.Id).HasColumnName("TestDriveID");
+
+                // Scalars
+                e.Property(t => t.FullName).IsRequired().HasMaxLength(120);
+                e.Property(t => t.Phone).IsRequired().HasMaxLength(40);
+                e.Property(t => t.Email).HasMaxLength(120);
+                e.Property(t => t.VehicleName).IsRequired().HasMaxLength(160);
+                e.Property(t => t.Notes).HasMaxLength(1000);
+                e.Property(t => t.AssignedTo).HasMaxLength(120);
+                e.Property(t => t.CreatedAt).HasDefaultValueSql("SYSUTCDATETIME()");
+
+                // Legacy column names
+                e.Property(t => t.VehicleId).HasColumnName("VehicleID");
+                e.Property(t => t.PreferredAt).HasColumnName("ScheduledAt").IsRequired();
+
+                // Enums
+                e.Property(t => t.Status)
+                 .HasConversion<string>()   // DB has NVARCHAR(40)
+                 .HasMaxLength(40);
+
+                // FKs
+                e.HasOne(t => t.User)
+                 .WithMany()
+                 .HasForeignKey(t => t.UserId)
+                 .OnDelete(DeleteBehavior.SetNull);
+
+                // IMPORTANT: tie to the actual Vehicle nav to avoid a shadow relation (VehicleID1)
+                // If your Vehicle class HAS a collection: public ICollection<TestDrive> TestDrives { get; set; }
+                e.HasOne<Vehicle>()
+                 .WithMany()   // ← use the real nav if it exists
+                 .HasForeignKey(t => t.VehicleId)
+                 .OnDelete(DeleteBehavior.Restrict);
+
+                // If your Vehicle class DOES NOT have TestDrives, use this instead:
+                // e.HasOne<Vehicle>()
+                //  .WithMany()
+                //  .HasForeignKey(t => t.VehicleId)
+                //  .OnDelete(DeleteBehavior.Restrict);
+            });
+
+            // Lecturers / Lectures
             b.Entity<Lecturer>(e =>
             {
                 e.ToTable("Lecturers");
@@ -141,25 +187,7 @@ namespace AutoSalonAPI.Data
                 e.HasMany(x => x.Lectures)
                  .WithOne(x => x.Lecturer!)
                  .HasForeignKey(x => x.LecturerID)
-                 .OnDelete(DeleteBehavior.Cascade); 
-            });
-            
-             b.Entity<Sale>(e =>
-            {
-                e.HasKey(x => x.SaleID);
-                e.Property(x => x.Price).HasColumnType("decimal(18,2)");
-                e.Property(x => x.BuyerName).HasMaxLength(150).IsRequired();
-                e.Property(x => x.BuyerEmail).HasMaxLength(200).IsRequired();
-                e.Property(x => x.BuyerPhone).HasMaxLength(50);
-                e.Property(x => x.PaintDescription).HasMaxLength(100);
-                e.Property(x => x.Angle).HasMaxLength(10);
-
-               
-                 e.HasOne<Vehicle>()
-                .WithMany()
-                .HasForeignKey(x => x.VehicleID)
-                .HasPrincipalKey(v => v.VehicleID)  
-                .OnDelete(DeleteBehavior.Restrict);
+                 .OnDelete(DeleteBehavior.Cascade);
             });
 
             b.Entity<Lecture>(e =>

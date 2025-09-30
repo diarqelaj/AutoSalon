@@ -101,14 +101,29 @@ const Hero = () => {
 
   const badgesToShow = whitelistedBadges.length ? whitelistedBadges : topFiveBadges;
 
-  const doSearch = () => {
-    const qs = new URLSearchParams();
-    if (brand !== ANY) qs.set("brand", brand);
-    if (body !== ANY) qs.set("body", body);
-    if (budgetMax) qs.set("maxPrice", budgetMax);
-    if (yearMin) qs.set("minYear", yearMin);
-    router.push(`/pricing?${qs.toString()}`);
-  };
+ const doSearch = () => {
+  const qs = new URLSearchParams();
+
+  // OPTIONAL: seed the free-text search so results show instantly
+  const qParts = [];
+  if (brand !== ANY) qParts.push(brand);
+  if (body !== ANY) qParts.push(body);
+  if (yearMin) qParts.push(yearMin);
+  if (budgetMax) qParts.push(budgetMax);
+  if (qParts.length) qs.set("q", qParts.join(" "));
+
+  // tell pricing page to focus the input
+  qs.set("autofocus", "1");
+
+  // if you still want to pass structured filters too, keep these (even if pricing
+  // page doesn't use them yet; harmless)
+  if (brand !== ANY) qs.set("brand", brand);
+  if (body !== ANY) qs.set("body", body);
+  if (budgetMax) qs.set("maxPrice", budgetMax);
+  if (yearMin) qs.set("minYear", yearMin);
+
+  router.push(`/pricing?${qs.toString()}`);
+};
 
   return (
     <section className="min-h-[86vh] relative flex items-center justify-center overflow-hidden">
