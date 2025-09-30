@@ -594,6 +594,26 @@ export default function VehiclePage() {
             );
           })()}
         </div>
+        <div className="mt-4">
+        <Button
+          onClick={() => {
+            const baseParams =
+              `vehicleId=${v.id}` +
+              `&angle=${angle}` +
+              (paintDesc ? `&paint=${encodeURIComponent(paintDesc)}` : "");
+            const href = isSale
+              ? `/purchase?${baseParams}`
+              : isRental
+              ? `/booking?${baseParams}&days=${days}`
+              : `/contact?${baseParams}`;
+            router.push(href);
+          }}
+          className="w-fit justify-left align-left border radius 3px hover:bg-luxury-gold/10"
+        >
+          {isSale ? "Buy now" : isRental ? "Continue to checkout" : "Contact sales"}
+        </Button>
+        
+      </div>
 
         <div className="mt-6">
           <Badge variant="outline">Live imagery via IMAGIN</Badge>

@@ -81,10 +81,31 @@ type AppUser = {
   locked?: boolean; // jo ne API — UI-only flag (leave false)
   createdAt: string;
 };
+type Sale = {
+  saleID: number;
+  vehicleID: number;
+  vehicleName: string;    
+  make: string;            
+  modelFamily: string;     
+  modelYear?: number | null;
+  price: number;
+  paintDescription?: string | null;
+  angle?: string | null;
+  buyerName: string;
+  buyerEmail: string;
+  buyerPhone?: string | null;
+  createdAt: string;
+};
 
-/* -----------------------------------------------------------
-   Generic list hook (vehicles/models/brands)
------------------------------------------------------------ */
+type PagedResult<T> = {
+  page: number;
+  pageSize: number;
+  totalItems: number;
+  totalPages: number;
+  items: T[];
+};
+
+
 function useList<T>(url: string) {
   const [data, setData] = useState<T[] | null>(() => getCache<T[]>(url));
   const [loading, setLoading] = useState(!getCache<T[]>(url));
@@ -191,9 +212,8 @@ function Modal({
 export default function AdminPage() {
   const router = useRouter();
   const [allowed, setAllowed] = useState<boolean | null>(null);
-  const [tab, setTab] = useState<"vehicles" | "models" | "brands" | "users"| "fleet">(
-    "vehicles"
-  );
+  const [tab, setTab] = useState<"vehicles" | "models" | "brands" | "users" | "fleet" | "orders">("vehicles");
+
 
   useEffect(() => {
     const u = getCurrentUser();
@@ -234,6 +254,7 @@ export default function AdminPage() {
           { id: "brands", title: "Brands" },
           { id: "users", title: "Users" },
           { id: "fleet", title: "Fleet" },
+          { id: "orders", title: "Orders" },
 
         ]}
       />
@@ -244,14 +265,334 @@ export default function AdminPage() {
         {tab === "brands" && <BrandsPanel />}
         {tab === "users" && <UsersPanel />}
         {tab === "fleet" && <FleetPanel />}
+        {tab === "orders" && <OrdersPanel />} 
       </div>
     </section>
   );
 }
 
+function OrderModal({
+  open,
+  onClose,
+  editing,
+  onSaved,
+}: {
+  open: boolean;
+  onClose: () => void;
+  editing: Sale | null;
+  onSaved: () => void;
+}) {
+  // Always call hooks at the top level
+  const [buyerName, setBuyerName] = useState<string>(editing?.buyerName ?? "");
+  const [buyerEmail, setBuyerEmail] = useState<string>(editing?.buyerEmail ?? "");
+  const [buyerPhone, setBuyerPhone] = useState<string>(editing?.buyerPhone ?? "");
+  const [price, setPrice] = useState<number>(editing?.price ?? 0);
+  const [vehicleID, setVehicleID] = useState<number>(editing?.vehicleID ?? 0);
+  const [paintDescription, setPaintDescription] = useState<string>(editing?.paintDescription ?? "");
+  const [angle, setAngle] = useState<string>(editing?.angle ?? "");
+
+  // Keep local state in sync when a new order is opened
+  useEffect(() => {
+    if (open && editing) {
+      setBuyerName(editing.buyerName);
+      setBuyerEmail(editing.buyerEmail);
+      setBuyerPhone(editing.buyerPhone ?? "");
+      setPrice(editing.price);
+      setVehicleID(editing.vehicleID);
+      setPaintDescription(editing.paintDescription ?? "");
+      setAngle(editing.angle ?? "");
+    }
+  }, [open, editing]);
+
+  // It's safe to return after hooks
+  if (!open || !editing) return null;
+
+  const save = async () => {
+    try {
+      await api.put(`/sales/${editing.saleID}`, {
+        vehicleID,
+        buyerName,
+        buyerEmail,
+        buyerPhone: buyerPhone || null,
+        price,
+        paintDescription: paintDescription || null,
+        angle: angle || null,
+      });
+      onSaved();
+      onClose();
+    } catch {
+      // optional: toast
+    }
+  };
+
+  return (
+    <Modal
+      open={open}
+      onClose={onClose}
+      title={`Edit Order #${editing.saleID}`}
+      footer={
+        <>
+          <Button variant="outline" onClick={onClose}>Cancel</Button>
+          <Button onClick={save}>Save changes</Button>
+        </>
+      }
+    >
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+        <Input
+          type="number"
+          placeholder="VehicleID"
+          value={vehicleID}
+          onChange={(e) => setVehicleID(Number(e.target.value))}
+        />
+        <Input
+          placeholder="Buyer Name"
+          value={buyerName}
+          onChange={(e) => setBuyerName(e.target.value)}
+        />
+        <Input
+          type="email"
+          placeholder="Buyer Email"
+          value={buyerEmail}
+          onChange={(e) => setBuyerEmail(e.target.value)}
+        />
+        <Input
+          placeholder="Buyer Phone"
+          value={buyerPhone}
+          onChange={(e) => setBuyerPhone(e.target.value)}
+        />
+        <Input
+          type="number"
+          placeholder="Price (€)"
+          value={price}
+          onChange={(e) => setPrice(Number(e.target.value))}
+        />
+        <Input
+          placeholder="Paint Description"
+          value={paintDescription}
+          onChange={(e) => setPaintDescription(e.target.value)}
+        />
+        <Input
+          placeholder="Angle"
+          value={angle}
+          onChange={(e) => setAngle(e.target.value)}
+        />
+        <div className="md:col-span-2 text-xs text-muted-foreground">
+          Note: changing VehicleID will re-link this order to a different vehicle.
+        </div>
+      </div>
+    </Modal>
+  );
+}
 /* ===========================================================
-   VEHICLES
+   ORDERS (Sales) — LIST PANEL
 =========================================================== */
+function OrdersPanel() {
+  const router = useRouter();
+
+  // filters + paging
+  const [page, setPage] = useState(1);
+  const [pageSize, setPageSize] = useState(20);
+  const [q, setQ] = useState("");
+  const [dateFrom, setDateFrom] = useState<string>("");
+  const [dateTo, setDateTo] = useState<string>("");
+  const [sort, setSort] = useState<string>("-createdAt");
+
+  // data
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [rows, setRows] = useState<Sale[]>([]);
+  const [total, setTotal] = useState(0);
+  const totalPages = Math.max(1, Math.ceil(total / pageSize));
+
+  const load = async () => {
+    try {
+      setLoading(true);
+      setError(null);
+      const url =
+        `/sales?page=${page}&pageSize=${pageSize}` +
+        (q ? `&search=${encodeURIComponent(q)}` : "") +
+        (dateFrom ? `&dateFrom=${encodeURIComponent(dateFrom)}` : "") +
+        (dateTo ? `&dateTo=${encodeURIComponent(dateTo)}` : "") +
+        (sort ? `&sort=${encodeURIComponent(sort)}` : "");
+      const res = await api.get<PagedResult<Sale>>(url);
+      setRows(res.data.items);
+      setTotal(res.data.totalItems);
+    } catch {
+      setError("Failed to load orders.");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    void load();
+    const onFocus = () => void load();
+    window.addEventListener("focus", onFocus);
+    return () => window.removeEventListener("focus", onFocus);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [page, pageSize, sort]); // search triggers via button
+
+  const viewOrder = (s: Sale) => {
+    router.push(
+      `/thank-you?saleId=${s.saleID}&vehicleId=${s.vehicleID}` +
+        (s.paintDescription ? `&paint=${encodeURIComponent(s.paintDescription)}` : "") +
+        (s.angle ? `&angle=${encodeURIComponent(s.angle)}` : "")
+    );
+  };
+
+  const handleDelete = async (id: number) => {
+    const snapshot = rows;
+    setRows((prev) => prev.filter((x) => x.saleID !== id));
+    try {
+      await api.delete(`/sales/${id}`);
+      if (total - 1 <= (page - 1) * pageSize && page > 1) {
+        setPage(page - 1);
+      } else {
+        void load();
+      }
+    } catch {
+      setRows(snapshot);
+    }
+  };
+
+  // modal state
+  const [open, setOpen] = useState(false);
+  const [editing, setEditing] = useState<Sale | null>(null);
+  const startEdit = (s: Sale) => {
+    setEditing(s);
+    setOpen(true);
+  };
+
+  return (
+    <Card className="border-border">
+      <CardContent className="p-5">
+        {/* Filter bar */}
+        <div className="mb-5 grid grid-cols-1 lg:grid-cols-[1fr_auto_auto_auto_auto] gap-3">
+          <Input
+            className="w-full"
+            placeholder="Search buyer email / name / VIN…"
+            value={q}
+            onChange={(e) => setQ(e.target.value)}
+          />
+          <Input type="date" value={dateFrom} onChange={(e) => setDateFrom(e.target.value)} title="From" />
+          <Input type="date" value={dateTo} onChange={(e) => setDateTo(e.target.value)} title="To" />
+          <select
+            className="h-9 rounded-md border border-input bg-background px-2 text-sm"
+            value={sort}
+            onChange={(e) => setSort(e.target.value)}
+            title="Sort"
+          >
+            <option value="-createdAt">Newest</option>
+            <option value="createdAt">Oldest</option>
+            <option value="-price">Price (high → low)</option>
+            <option value="price">Price (low → high)</option>
+          </select>
+          <Button
+            variant="outline"
+            onClick={() => {
+              setPage(1);
+              void load();
+            }}
+          >
+            Search
+          </Button>
+        </div>
+
+        {loading && <div className="text-muted-foreground">Loading orders…</div>}
+        {error && <div className="text-destructive">{error}</div>}
+
+        {!loading && !error && (
+          <>
+            <div className="overflow-x-auto">
+              <table className="w-full text-sm">
+                <thead>
+                  <tr className="text-left border-b border-border">
+                    <th className="py-2 pr-3">Order #</th>
+                    <th className="py-2 pr-3">Created</th>
+                    <th className="py-2 pr-3">Buyer</th>
+                    <th className="py-2 pr-3">Email</th>
+                    <th className="py-2 pr-3">Vehicle (VIN/name)</th>
+                    <th className="py-2 pr-3">Price</th>
+                    <th className="py-2 pr-0 text-right">Actions</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {rows.map((s) => (
+                    <tr key={s.saleID} className="border-b border-border/70">
+                      <td className="py-2 pr-3 font-mono">#{s.saleID}</td>
+                      <td className="py-2 pr-3">{new Date(s.createdAt).toLocaleString()}</td>
+                      <td className="py-2 pr-3">{s.buyerName}</td>
+                      <td className="py-2 pr-3">{s.buyerEmail}</td>
+                      <td className="py-2 pr-3">
+                        {s.vehicleName}
+                        {s.modelYear ? ` · ${s.modelYear}` : ""}
+                        {s.paintDescription ? ` · ${s.paintDescription}` : ""}
+                      </td>
+                      <td className="py-2 pr-3">€ {Math.round(s.price).toLocaleString()}</td>
+                      <td className="py-2 pl-3">
+                        <div className="flex justify-end gap-2">
+                          <Button variant="outline" size="sm" onClick={() => viewOrder(s)}>View</Button>
+                          <Button variant="outline" size="sm" onClick={() => startEdit(s)}>Edit</Button>
+                          <Button variant="destructive" size="sm" onClick={() => handleDelete(s.saleID)}>
+                            Delete
+                          </Button>
+                        </div>
+                      </td>
+                    </tr>
+                  ))}
+                  {rows.length === 0 && (
+                    <tr>
+                      <td colSpan={7} className="py-6 text-center text-muted-foreground">
+                        No orders found.
+                      </td>
+                    </tr>
+                  )}
+                </tbody>
+              </table>
+            </div>
+
+            {/* Pager */}
+            <div className="mt-4 flex items-center justify-between text-sm">
+              <span className="text-muted-foreground">
+                Page {page} / {totalPages} • {total.toLocaleString()} orders
+              </span>
+              <div className="flex items-center gap-2">
+                <select
+                  className="h-9 rounded-md border border-input bg-background px-2 text-sm"
+                  value={pageSize}
+                  onChange={(e) => {
+                    setPageSize(Number(e.target.value));
+                    setPage(1);
+                  }}
+                >
+                  <option value={10}>10</option>
+                  <option value={20}>20</option>
+                  <option value={50}>50</option>
+                </select>
+                <Button variant="outline" size="sm" disabled={page <= 1} onClick={() => setPage((p) => p - 1)}>
+                  Prev
+                </Button>
+                <Button variant="outline" size="sm" disabled={page >= totalPages} onClick={() => setPage((p) => p + 1)}>
+                  Next
+                </Button>
+              </div>
+            </div>
+          </>
+        )}
+      </CardContent>
+
+      {/* Re-use your existing modal */}
+      <OrderModal
+        open={open}
+        onClose={() => setOpen(false)}
+        editing={editing}
+        onSaved={() => void load()}
+      />
+    </Card>
+  );
+}
+
+
 function VehiclesPanel() {
   const { data, setData, loading, error, reload } =
     useList<Vehicle>("/vehicles");
@@ -1053,6 +1394,7 @@ function ModelModal({
     </Modal>
   );
 }
+
 
 /* ===========================================================
    BRANDS
